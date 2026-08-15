@@ -228,9 +228,17 @@ export class Ppk2Client {
     } catch {
       /* ignore */
     }
-    await this.readLoopPromise?.catch(() => undefined);
-    this.readLoopPromise = null;
+    // Tell the worker to stop parsing new sample bytes *first*, so any
+    // in-flight bytes still being pumped by the read loop are dropped
+    // instead of decoded into stray batches after stop.
     await this.send({ type: "stopSampling", requestId: 0 });
+    // Do NOT await the read loop: `reader.read()` only resolves when the
+    // device sends more bytes (or the port closes). After `buildStop()`
+    // the PPK2 may go completely silent, so awaiting here can hang the
+    // UI indefinitely. The loop's `while (this.sampling)` guard is
+    // already false, so it will exit naturally on the next byte (or on
+    // disconnect, which cancels the reader).
+    this.readLoopPromise = null;
     this.setStatus({ connected: this.port !== null, sampling: false });
   }
 

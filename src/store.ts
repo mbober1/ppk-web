@@ -26,6 +26,12 @@ interface UiState {
   sampleRateHz: number;
   /** Maximum retainable recording length at the current rate (seconds). */
   maxDurationS: number;
+  /**
+   * Chart Y-axis settings. Values are in mA (matching the axis label units)
+   * even though the underlying sample data is in µA — the chart divides at
+   * render time. Purely UI state; no device I/O.
+   */
+  yAxis: { auto: boolean; minMa: number; maxMa: number };
   // Live stats (mirrored from Recorder ~5× / s)
   stats: Stats;
 
@@ -35,6 +41,8 @@ interface UiState {
   setDut: (on: boolean) => Promise<void>;
   setSpikeFilter: (on: boolean) => Promise<void>;
   setSampleRateHz: (hz: number) => Promise<void>;
+  setYAxisAuto: (auto: boolean) => void;
+  setYAxisRange: (minMa: number, maxMa: number) => void;
   connect: (port?: SerialPort) => Promise<void>;
   disconnect: () => Promise<void>;
   start: () => Promise<void>;
@@ -52,6 +60,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   spikeFilter: true,
   sampleRateHz: DEFAULT_SAMPLE_RATE_HZ,
   maxDurationS: recorder.maxDurationS,
+  yAxis: { auto: true, minMa: 0, maxMa: 10 },
   stats: emptyStats(),
 
   setError: (error) => set({ error }),
@@ -115,6 +124,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   refreshStats: () => {
     // Copy so React sees a new object reference.
     set({ stats: { ...recorder.getStats() } });
+  },
+  setYAxisAuto: (auto) => {
+    set((s) => ({ yAxis: { ...s.yAxis, auto } }));
+  },
+  setYAxisRange: (minMa, maxMa) => {
+    set((s) => ({ yAxis: { ...s.yAxis, minMa, maxMa } }));
   },
 }));
 

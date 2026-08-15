@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import uPlot, { type AlignedData, type Options } from "uplot";
 
 import { ppk2 } from "../ppk2/client";
+import { useUiStore } from "../store";
 
 /**
  * Live current chart.
@@ -33,6 +34,10 @@ function windowSamplesFor(rateHz: number): number {
 export function LiveChart(): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const plotRef = useRef<uPlot | null>(null);
+  // Subscribe to the y-axis scale config. This only changes when the user
+  // edits it in the ChartPanel, so re-running the effect below is cheap
+  // and never happens on the per-batch hot path.
+  const yAxis = useUiStore((s) => s.yAxis);
 
   // Ring buffer state, held in refs so React never re-renders on updates.
   // Sized for the initial rate; may be reallocated when the rate changes.
@@ -82,6 +87,7 @@ export function LiveChart(): JSX.Element {
         {
           stroke: "#8a92a2",
           grid: { stroke: "#2d323d", width: 1 },
+          size: 90,
           values: (_u, splits) =>
             splits.map((v) => {
               if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)} mA`;
@@ -190,6 +196,49 @@ export function LiveChart(): JSX.Element {
       }
     };
   }, []);
+
+  // Apply the y-axis scale settings. Underlying samples are in µA, so mA
+  // bounds from the store are multiplied by 1000.
+  //
+  // Important: uPlot normalizes `scale.auto` to a *function* at init
+  // (`sc.auto = fnOrSelf(sc.auto)`), and calls it as `sc.auto(self, …)`
+  // on every subsequent `setData`. Overwriting the live scale's `auto`
+  // with a plain boolean therefore throws mid-render and freezes the
+  // chart. We must always assign a function.
+  //
+  // We also skip this effect entirely on first mount with the default
+  // (auto=true) — otherwise we'd force an early `setData` before the
+  // sample subscription has filled the ring buffer.
+  const wentManualRef = useRef(false);
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const yScale = plot.scales.y as {
+      auto?: unknown;
+      min?: number;
+      max?: number;
+    };
+    if (!yAxis.auto) {
+      wentManualRef.current = true;
+      // Prevent subsequent setData() calls from re-autoranging Y.
+      yScale.auto = (() => false) as typeof yScale.auto;
+      plot.setScale("y", {
+        min: yAxis.minMa * 1000,
+        max: yAxis.maxMa * 1000,
+      });
+    } else if (wentManualRef.current) {
+      // Restore auto-ranging: put the auto fn back and nudge a redraw
+      // so the axis snaps to the current data immediately.
+      yScale.auto = (() => true) as typeof yScale.auto;
+      const n = filledRef.current;
+      if (n > 0) {
+        plot.setData([
+          xRef.current.subarray(0, n),
+          yRef.current.subarray(0, n),
+        ] as AlignedData);
+      }
+    }
+  }, [yAxis]);
 
   return (
     <div

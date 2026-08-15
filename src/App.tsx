@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { ChartPanel } from "./components/ChartPanel";
 import { ConnectButton } from "./components/ConnectButton";
 import { Controls } from "./components/Controls";
 import { ErrorBanner } from "./components/ErrorBanner";
@@ -67,6 +68,7 @@ export function App(): JSX.Element {
         <aside className="sidebar">
           <ModePanel />
           <Controls />
+          <ChartPanel />
           <ExportPanel />
         </aside>
         <section className="content">
