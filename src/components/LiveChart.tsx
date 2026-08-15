@@ -38,6 +38,15 @@ export function LiveChart(): JSX.Element {
   // edits it in the ChartPanel, so re-running the effect below is cheap
   // and never happens on the per-batch hot path.
   const yAxis = useUiStore((s) => s.yAxis);
+  // Bumped by store.start() each time a new run begins. We use it to wipe
+  // the rolling ring buffer so the chart always starts at t=0 with no
+  // stale trace from the previous run.
+  const resetSignal = useUiStore((s) => s.resetSignal);
+  // When non-null, we render the corresponding saved run's raw samples
+  // instead of the live ring buffer, and pause live-sample intake.
+  const selectedRecentId = useUiStore((s) => s.selectedRecentId);
+  const loadRecentRaw = useUiStore((s) => s.loadRecentRaw);
+  const selectedRef = useRef<string | null>(null);
 
   // Ring buffer state, held in refs so React never re-renders on updates.
   // Sized for the initial rate; may be reallocated when the rate changes.
@@ -153,6 +162,9 @@ export function LiveChart(): JSX.Element {
     };
 
     const unsubscribe = ppk2.onSamples((batch) => {
+      // Paused while showing a saved run — still accumulate into the ring
+      // so live data isn't lost, but skip the redraw.
+      const showingSaved = selectedRef.current !== null;
       // Rate change → rebuild axis + resize ring buffer, then continue.
       if (batch.sampleRateHz !== rateRef.current) {
         rebuildAxis(batch.sampleRateHz);
@@ -185,7 +197,7 @@ export function LiveChart(): JSX.Element {
       }
 
       dirtyRef.current = true;
-      scheduleDraw();
+      if (!showingSaved) scheduleDraw();
     });
 
     return () => {
@@ -239,6 +251,74 @@ export function LiveChart(): JSX.Element {
       }
     }
   }, [yAxis]);
+
+  // Wipe the ring buffer whenever a new run starts. The initial mount
+  // fires with resetSignal=0 which is harmless (buffer is already empty).
+  useEffect(() => {
+    yRef.current.fill(0);
+    filledRef.current = 0;
+    dirtyRef.current = false;
+    if (plotRef.current) {
+      plotRef.current.setData([
+        xRef.current.subarray(0, 0),
+        yRef.current.subarray(0, 0),
+      ] as AlignedData);
+    }
+  }, [resetSignal]);
+
+  // Render the selected saved run — or, when cleared, restore the live
+  // ring-buffer view. We keep the live subscription running so no samples
+  // are missed while a saved run is being reviewed.
+  useEffect(() => {
+    selectedRef.current = selectedRecentId;
+    const plot = plotRef.current;
+    if (!plot) return;
+
+    if (selectedRecentId === null) {
+      // Restore whatever the live ring currently holds. Rebuild x-axis
+      // in case the live rate differs from the saved run's rate we just
+      // showed.
+      rebuildAxis(rateRef.current);
+      const n = filledRef.current;
+      plot.setData([
+        xRef.current.subarray(0, n),
+        yRef.current.subarray(0, n),
+      ] as AlignedData);
+      return;
+    }
+
+    let cancelled = false;
+    void loadRecentRaw(selectedRecentId).then((raw) => {
+      if (cancelled || !plotRef.current) return;
+      if (!raw || raw.current.length === 0) {
+        // No raw data available — leave the chart empty and show nothing.
+        plotRef.current.setData([
+          new Float64Array(0),
+          new Float32Array(0),
+        ] as unknown as AlignedData);
+        return;
+      }
+      // Downsample if the saved run is larger than what uPlot can render
+      // quickly. Simple stride sampling keeps the shape recognisable and
+      // is O(n).
+      const rate = raw.sampleRateHz;
+      const src = raw.current;
+      const n = src.length;
+      const stride = Math.max(1, Math.ceil(n / MAX_WINDOW_SAMPLES));
+      const outLen = Math.ceil(n / stride);
+      const xs = new Float64Array(outLen);
+      const ys = new Float32Array(outLen);
+      for (let i = 0, j = 0; i < n; i += stride, j++) {
+        xs[j] = i / rate;
+        ys[j] = src[i];
+      }
+      plotRef.current.setData([xs, ys] as AlignedData);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRecentId, loadRecentRaw]);
 
   return (
     <div

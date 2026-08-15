@@ -95,10 +95,9 @@ export function LandingPage(): JSX.Element {
   const handleAddDevice = async () => {
     setError(null);
     try {
-      const port = await Ppk2Client.requestPort();
-      // Ensure the freshly authorized port is in the list, then connect.
+      await Ppk2Client.requestPort();
+      // Ensure the freshly authorized port is in the list.
       await refresh();
-      // await doConnect(port);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // User dismissing the picker throws — that's not an error.

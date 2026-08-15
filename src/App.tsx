@@ -8,6 +8,7 @@ import { ExportPanel } from "./components/ExportPanel";
 import { LandingPage } from "./components/LandingPage";
 import { LiveChart } from "./components/LiveChart";
 import { ModePanel } from "./components/ModePanel";
+import { RecentPanel } from "./components/RecentPanel";
 import { StatsPanel } from "./components/StatsPanel";
 import { Ppk2Client } from "./ppk2/client";
 import { useUiStore } from "./store";
@@ -69,6 +70,7 @@ export function App(): JSX.Element {
           <ModePanel />
           <Controls />
           <ChartPanel />
+          <RecentPanel />
           <ExportPanel />
         </aside>
         <section className="content">

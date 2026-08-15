@@ -15,6 +15,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    "noEmit": true,
     "types": ["w3c-web-serial", "vite/client"]
   },
   "include": ["src"]

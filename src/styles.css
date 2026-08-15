@@ -568,3 +568,91 @@ button.large {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* ---------- Recent measurements panel ---------- */
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 0.1s,
+    background 0.1s;
+}
+.recent-item:hover {
+  border-color: var(--accent);
+}
+.recent-item.selected {
+  border-color: var(--accent);
+  background: rgba(79, 140, 255, 0.12);
+}
+.recent-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.recent-item-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text);
+}
+.recent-item-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.recent-item-del {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.recent-item-del:hover {
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.12);
+  border-color: transparent;
+}
+
+/* ---------- Stats banner (viewing saved measurement) ---------- */
+
+.stats-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  background: rgba(79, 140, 255, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--accent-2);
+}
+.stats-banner button.link {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.stats-banner button.link:hover {
+  color: var(--accent-2);
+}

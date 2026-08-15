@@ -57,7 +57,6 @@ export class Ppk2Client {
   private port: SerialPort | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private readLoopPromise: Promise<void> | null = null;
   private sampling = false;
   private sampleRateHz: number = DEFAULT_SAMPLE_RATE_HZ;
 
@@ -215,7 +214,9 @@ export class Ppk2Client {
     await this.writeBytes(buildStart());
     this.sampling = true;
     this.setStatus({ connected: true, sampling: true });
-    this.readLoopPromise = this.sampleReadLoop().catch((err) => {
+    // Fire-and-forget: read loop runs until sampling=false or the port
+    // closes. Errors are surfaced via emitError.
+    void this.sampleReadLoop().catch((err) => {
       this.emitError(`Read loop failed: ${String(err)}`);
     });
   }
@@ -238,7 +239,6 @@ export class Ppk2Client {
     // UI indefinitely. The loop's `while (this.sampling)` guard is
     // already false, so it will exit naturally on the next byte (or on
     // disconnect, which cancels the reader).
-    this.readLoopPromise = null;
     this.setStatus({ connected: this.port !== null, sampling: false });
   }
 
