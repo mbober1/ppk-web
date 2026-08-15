@@ -806,3 +806,34 @@ button.large {
 .stats-banner button.link:hover {
   color: var(--accent-2);
 }
+
+.stats-banner.selection {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.stats-banner.selection button.link {
+  color: var(--danger);
+}
+.stats-banner.selection button.link:hover {
+  color: #ff8f8f;
+}
+
+/* ---------- Chart selection (shift-drag range on the main chart) ---------- */
+
+.chart-selection {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  background: rgba(255, 107, 107, 0.15);
+  border-left: 1px solid var(--danger);
+  border-right: 1px solid var(--danger);
+  box-sizing: border-box;
+}
+
+.stats.selection .stat {
+  border-color: var(--danger);
+}
+.stats.selection .stat .value {
+  color: var(--danger);
+}

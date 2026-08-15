@@ -306,9 +306,20 @@ interface UiState {
    */
   liveDetached: boolean;
 
+  /**
+   * Shift-drag time-range selection on the main chart (seconds), snapshot
+   * mode only. Null when nothing is selected. Independent of `viewport` —
+   * the selection stays anchored to its data range across zoom/pan.
+   */
+  selection: { min: number; max: number } | null;
+  /** Stats computed over `selection`. Null exactly when `selection` is null. */
+  selectionStats: Stats | null;
+
   setViewport: (min: number, max: number) => void;
   setDataExtent: (min: number, max: number) => void;
   setLiveDetached: (v: boolean) => void;
+  setSelection: (min: number, max: number, stats: Stats) => void;
+  clearSelection: () => void;
 
   setError: (m: string | null) => void;
   setMode: (m: PowerMode) => Promise<void>;
@@ -349,10 +360,15 @@ export const useUiStore = create<UiState>((set, get) => ({
   viewport: null,
   dataExtent: null,
   liveDetached: false,
+  selection: null,
+  selectionStats: null,
 
   setViewport: (min, max) => set({ viewport: { min, max } }),
   setDataExtent: (min, max) => set({ dataExtent: { min, max } }),
   setLiveDetached: (v) => set({ liveDetached: v }),
+  setSelection: (min, max, stats) =>
+    set({ selection: { min, max }, selectionStats: stats }),
+  clearSelection: () => set({ selection: null, selectionStats: null }),
 
   setError: (error) => set({ error }),
 
@@ -421,6 +437,8 @@ export const useUiStore = create<UiState>((set, get) => ({
       viewport: null,
       dataExtent: null,
       liveDetached: false,
+      selection: null,
+      selectionStats: null,
     }));
     runStartedAt = Date.now();
     await ppk2.start();
@@ -453,10 +471,14 @@ export const useUiStore = create<UiState>((set, get) => ({
         viewport: null,
         dataExtent: null,
         liveDetached: false,
+        selection: null,
+        selectionStats: null,
       }));
       return;
     }
-    set({ selectedRecentId: id });
+    // Switching between saved measurements (or live → saved): any
+    // selection belonged to the previous data array and must not leak.
+    set({ selectedRecentId: id, selection: null, selectionStats: null });
   },
   deleteRecent: (id) => {
     const entry = get().recents.find((r) => r.id === id);
@@ -464,11 +486,18 @@ export const useUiStore = create<UiState>((set, get) => ({
     set((s) => ({
       recents: s.recents.filter((r) => r.id !== id),
       selectedRecentId: s.selectedRecentId === id ? null : s.selectedRecentId,
+      selection: s.selectedRecentId === id ? null : s.selection,
+      selectionStats: s.selectedRecentId === id ? null : s.selectionStats,
     }));
   },
   clearRecents: () => {
     void clearAllRaw();
-    set({ recents: [], selectedRecentId: null });
+    set({
+      recents: [],
+      selectedRecentId: null,
+      selection: null,
+      selectionStats: null,
+    });
   },
   loadRecentRaw: async (id) => {
     const entry = get().recents.find((r) => r.id === id);

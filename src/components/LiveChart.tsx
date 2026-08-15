@@ -3,7 +3,16 @@ import uPlot, { type AlignedData, type Options } from "uplot";
 
 import { ppk2 } from "../ppk2/client";
 import { decimateMinMaxRange } from "../ppk2/decimate";
+import { rangeStats } from "../ppk2/rangeStats";
 import { useUiStore } from "../store";
+
+// Shift-drag selection: strided sample budget while the drag is in
+// progress (kept responsive on multi-million-sample recordings); the
+// exact stats are recomputed once on pointerup.
+const SELECTION_DRAG_MAX_SAMPLES = 20_000;
+// Minimum on-screen drag distance (px) before a shift-drag counts as a
+// selection rather than a click (which clears any existing selection).
+const SELECTION_CLICK_THRESHOLD_PX = 3;
 
 // Small epsilon used to avoid feedback loops when syncing viewport between
 // LiveChart and ChartMinimap: we only publish a new viewport to the store
@@ -100,9 +109,24 @@ export function LiveChart(): JSX.Element {
   const setViewport = useUiStore((s) => s.setViewport);
   const setDataExtent = useUiStore((s) => s.setDataExtent);
   const setLiveDetached = useUiStore((s) => s.setLiveDetached);
+  const setSelection = useUiStore((s) => s.setSelection);
+  const clearSelectionAction = useUiStore((s) => s.clearSelection);
   // The minimap writes liveDetached to tell us to stop auto-pinning.
   const liveDetached = useUiStore((s) => s.liveDetached);
   const liveDetachedRef = useRef(false);
+
+  // Shift-drag time-range selection overlay (snapshot mode only). Kept in
+  // refs — never triggers a React re-render on the hot drag path.
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  // Current selection, in data seconds. Null when nothing is selected.
+  const selectionRef = useRef<{ min: number; max: number } | null>(null);
+  // Non-null while a shift-drag is in progress.
+  const selDragRef = useRef<{
+    anchorT: number;
+    anchorX: number;
+    moved: boolean;
+  } | null>(null);
+  const selRafRef = useRef<number | null>(null);
 
   // The minimap instructs the main chart to jump to a specific range by
   // writing to viewport in the store. We consume that via a separate
@@ -136,9 +160,13 @@ export function LiveChart(): JSX.Element {
   const setViewportRef = useRef(setViewport);
   const setDataExtentRef = useRef(setDataExtent);
   const setLiveDetachedRef = useRef(setLiveDetached);
+  const setSelectionRef = useRef(setSelection);
+  const clearSelectionActionRef = useRef(clearSelectionAction);
   setViewportRef.current = setViewport;
   setDataExtentRef.current = setDataExtent;
   setLiveDetachedRef.current = setLiveDetached;
+  setSelectionRef.current = setSelection;
+  clearSelectionActionRef.current = clearSelectionAction;
 
   /** Publish viewport to the store, guarding against feedback loops. */
   const publishViewport = (min: number, max: number) => {
@@ -151,6 +179,51 @@ export function LiveChart(): JSX.Element {
       return;
     lastPublishedViewport.current = { min, max };
     setViewportRef.current(min, max);
+  };
+
+  // Reposition the selection overlay div from selectionRef (data seconds)
+  // to CSS pixels relative to the container. Pure geometry — never touches
+  // plot data, so it's safe to call from the setScale hook. Hides the
+  // overlay when there's no selection, no plot yet, or the selection is
+  // entirely outside the current x-viewport.
+  const positionSelectionOverlay = () => {
+    const overlay = overlayRef.current;
+    const plot = plotRef.current;
+    const sel = selectionRef.current;
+    if (!overlay) return;
+    if (!plot || !sel) {
+      overlay.style.display = "none";
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const plotLeft = plot.bbox.left / dpr;
+    const plotWidth = plot.bbox.width / dpr;
+    const plotTop = plot.bbox.top / dpr;
+    const plotHeight = plot.bbox.height / dpr;
+    let left = plotLeft + plot.valToPos(sel.min, "x");
+    let right = plotLeft + plot.valToPos(sel.max, "x");
+    // Clamp to the plotting area.
+    left = Math.max(plotLeft, Math.min(plotLeft + plotWidth, left));
+    right = Math.max(plotLeft, Math.min(plotLeft + plotWidth, right));
+    const width = right - left;
+    if (!(width > 0)) {
+      overlay.style.display = "none";
+      return;
+    }
+    overlay.style.display = "block";
+    overlay.style.left = `${left}px`;
+    overlay.style.width = `${width}px`;
+    overlay.style.top = `${plotTop}px`;
+    overlay.style.height = `${plotHeight}px`;
+  };
+
+  // Clear the selection everywhere: local refs, overlay DOM, and the store
+  // (so StatsPanel's Clear button and other consumers stay in sync).
+  const clearSelectionEverywhere = () => {
+    if (selectionRef.current === null) return;
+    selectionRef.current = null;
+    positionSelectionOverlay();
+    clearSelectionActionRef.current();
   };
 
   // Returns the plot canvas width in CSS pixels (never zero).
@@ -333,6 +406,9 @@ export function LiveChart(): JSX.Element {
             const { min, max } = u.scales.x;
             if (min == null || max == null) return;
             publishViewport(min, max);
+            // Reposition the selection overlay for the new viewport. Pure
+            // geometry (valToPos), no setData — safe inside this hook.
+            positionSelectionOverlay();
             // NOTE: we intentionally do NOT re-decimate here. Callers that
             // change the x-scale in snapshot mode go through
             // applySnapshotScale, which pushes fresh data via setData()
@@ -374,6 +450,7 @@ export function LiveChart(): JSX.Element {
       // computed from the previous decimation, producing corner gaps.
       // Same min/max means the setScale hook won't fire (no feedback).
       plot.redraw(true, false);
+      positionSelectionOverlay();
     });
     ro.observe(containerRef.current);
 
@@ -460,7 +537,7 @@ export function LiveChart(): JSX.Element {
     };
     containerRef.current.addEventListener("wheel", onWheel, { passive: false });
 
-    // --- Left-button drag-to-pan ---
+    // --- Left-button drag-to-pan / shift-drag-to-select ---
     // Replaces uPlot's built-in drag-zoom rectangle (disabled above).
     // In live mode, detaches the right-edge pin just like the minimap drag.
     // In snapshot mode, clamps within [0, snapshotDuration].
@@ -468,11 +545,40 @@ export function LiveChart(): JSX.Element {
     let panStartMin = 0;
     let panStartMax = 0;
     let panPending = false;
+    let panMoved = false;
+
+    // Convert a pointer event's clientX to a data-space time (seconds),
+    // using the container's bounding rect plus the plot's DPR-aware bbox.
+    const timeAtClientX = (e: PointerEvent, plot: uPlot): number => {
+      const rect = containerRef.current!.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const xPx = e.clientX - rect.left - plot.bbox.left / dpr;
+      return plot.posToVal(xPx, "x");
+    };
 
     const onPanDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const plot = plotRef.current;
       if (!plot) return;
+
+      if (e.shiftKey) {
+        // Shift-drag selection — snapshot mode only. Bail out *before*
+        // preventDefault/setPointerCapture so nothing else (pan, uPlot's
+        // own handlers) reacts to this gesture either way.
+        if (selectedRef.current === null || snapshotRawRef.current === null)
+          return;
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        selDragRef.current = {
+          anchorT: timeAtClientX(e, plot),
+          anchorX: e.clientX,
+          moved: false,
+        };
+        if (containerRef.current)
+          containerRef.current.style.cursor = "crosshair";
+        return;
+      }
+
       // Guard: no data to pan yet.
       if (selectedRef.current === null && filledRef.current === 0) return;
 
@@ -483,16 +589,61 @@ export function LiveChart(): JSX.Element {
       panStartMin = plot.scales.x.min ?? 0;
       panStartMax = plot.scales.x.max ?? liveWindowRef.current;
       panPending = true;
+      panMoved = false;
 
       if (containerRef.current) containerRef.current.style.cursor = "grabbing";
     };
 
     const onPanMove = (e: PointerEvent) => {
-      if (!panPending) return;
       const plot = plotRef.current;
       if (!plot) return;
 
+      // Shift-drag selection in progress — handled entirely separately
+      // from panning.
+      const drag = selDragRef.current;
+      if (drag) {
+        if (
+          !drag.moved &&
+          Math.abs(e.clientX - drag.anchorX) < SELECTION_CLICK_THRESHOLD_PX
+        ) {
+          return; // still inside the click dead-zone
+        }
+        drag.moved = true;
+        const dur = snapshotDurationRef.current;
+        const t = Math.max(0, Math.min(dur, timeAtClientX(e, plot)));
+        const min = Math.min(drag.anchorT, t);
+        const max = Math.max(drag.anchorT, t);
+        selectionRef.current = { min, max };
+        positionSelectionOverlay();
+        // Approximate (strided) stats while dragging, coalesced to rAF so
+        // a fast drag on a multi-million-sample recording stays smooth.
+        if (selRafRef.current === null) {
+          selRafRef.current = requestAnimationFrame(() => {
+            selRafRef.current = null;
+            const cur = selectionRef.current;
+            const src = snapshotRawRef.current;
+            if (!cur || !src) return;
+            const rate = snapshotRateRef.current;
+            const startIdx = Math.floor(cur.min * rate);
+            const endIdx = Math.ceil(cur.max * rate) + 1;
+            const stats = rangeStats(
+              src,
+              startIdx,
+              endIdx,
+              rate,
+              SELECTION_DRAG_MAX_SAMPLES,
+            );
+            setSelectionRef.current(cur.min, cur.max, stats);
+          });
+        }
+        return;
+      }
+
+      if (!panPending) return;
+
       const dx = e.clientX - panStartX;
+      if (!panMoved && Math.abs(dx) >= SELECTION_CLICK_THRESHOLD_PX)
+        panMoved = true;
       const span = panStartMax - panStartMin;
       // Convert pixel delta → time delta using the chart's current pixel width.
       const dtTime = (dx / pixelWidth()) * span;
@@ -540,10 +691,40 @@ export function LiveChart(): JSX.Element {
     };
 
     const onPanUp = (e: PointerEvent) => {
+      const drag = selDragRef.current;
+      if (drag) {
+        selDragRef.current = null;
+        if (selRafRef.current !== null) {
+          cancelAnimationFrame(selRafRef.current);
+          selRafRef.current = null;
+        }
+        (e.currentTarget as HTMLElement)?.releasePointerCapture(e.pointerId);
+        if (containerRef.current) containerRef.current.style.cursor = "grab";
+        if (!drag.moved) {
+          // Shift-click with no drag — clear any existing selection.
+          clearSelectionEverywhere();
+          return;
+        }
+        // Exact (unstrided) stats now that the drag has settled.
+        const cur = selectionRef.current;
+        const src = snapshotRawRef.current;
+        if (cur && src) {
+          const rate = snapshotRateRef.current;
+          const startIdx = Math.floor(cur.min * rate);
+          const endIdx = Math.ceil(cur.max * rate) + 1;
+          const stats = rangeStats(src, startIdx, endIdx, rate);
+          setSelectionRef.current(cur.min, cur.max, stats);
+        }
+        return;
+      }
+
       if (!panPending) return;
       panPending = false;
       (e.currentTarget as HTMLElement)?.releasePointerCapture(e.pointerId);
       if (containerRef.current) containerRef.current.style.cursor = "grab";
+      // Plain click (no drag, no shift) on the chart clears the selection —
+      // a lightweight, discoverable way to dismiss the red band.
+      if (!panMoved) clearSelectionEverywhere();
     };
 
     const el = containerRef.current;
@@ -552,12 +733,22 @@ export function LiveChart(): JSX.Element {
     el.addEventListener("pointerup", onPanUp);
     el.addEventListener("pointercancel", onPanUp as EventListener);
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") clearSelectionEverywhere();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
     return () => {
       containerRef.current?.removeEventListener("wheel", onWheel);
       el.removeEventListener("pointerdown", onPanDown);
       el.removeEventListener("pointermove", onPanMove);
       el.removeEventListener("pointerup", onPanUp);
       el.removeEventListener("pointercancel", onPanUp as EventListener);
+      window.removeEventListener("keydown", onKeyDown);
+      if (selRafRef.current !== null) {
+        cancelAnimationFrame(selRafRef.current);
+        selRafRef.current = null;
+      }
       ro.disconnect();
       plotRef.current?.destroy();
       plotRef.current = null;
@@ -697,6 +888,8 @@ export function LiveChart(): JSX.Element {
     liveWindowRef.current = LIVE_WINDOW_SECONDS;
     liveDetachedRef.current = false;
     lastPublishedViewport.current = null;
+    selectionRef.current = null;
+    positionSelectionOverlay();
     if (plotRef.current) {
       plotRef.current.setData([
         xRef.current.subarray(0, 0),
@@ -710,6 +903,12 @@ export function LiveChart(): JSX.Element {
   // are missed while a saved run is being reviewed.
   useEffect(() => {
     selectedRef.current = selectedRecentId;
+    // The selection belongs to whichever raw array was loaded when it was
+    // created — switching snapshots (or leaving snapshot mode) invalidates
+    // it. The store side of this reset is handled in selectRecent()/start();
+    // here we just clear the local overlay/ref half.
+    selectionRef.current = null;
+    positionSelectionOverlay();
     const plot = plotRef.current;
     if (!plot) return;
 
@@ -805,6 +1004,21 @@ export function LiveChart(): JSX.Element {
     return unsub;
   }, []);
 
+  // Subscribe to the store's selection field so an external clear (e.g. the
+  // Clear button in StatsPanel) also hides our overlay. We only react to
+  // the null case here — non-null writes always originate from this
+  // component (selectionRef is already up to date by the time we call
+  // setSelectionRef), so re-applying them would be redundant.
+  useEffect(() => {
+    const unsub = useUiStore.subscribe((state) => {
+      if (state.selection === null && selectionRef.current !== null) {
+        selectionRef.current = null;
+        positionSelectionOverlay();
+      }
+    });
+    return unsub;
+  }, []);
+
   // When the snapshot loads, publish its extent to the store.
   // The actual setData call already happens inside the selectedRecentId
   // effect below; we intercept here by observing snapshotDurationRef
@@ -814,7 +1028,19 @@ export function LiveChart(): JSX.Element {
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", minHeight: 320, cursor: "grab" }}
-    />
+      style={{
+        width: "100%",
+        height: "100%",
+        minHeight: 320,
+        cursor: "grab",
+        position: "relative",
+      }}
+    >
+      <div
+        ref={overlayRef}
+        className="chart-selection"
+        style={{ display: "none" }}
+      />
+    </div>
   );
 }

@@ -29,21 +29,45 @@ export function StatsPanel(): JSX.Element {
       : null,
   );
   const selectRecent = useUiStore((s) => s.selectRecent);
+  const selection = useUiStore((s) => s.selection);
+  const selectionStats = useUiStore((s) => s.selectionStats);
+  const clearSelection = useUiStore((s) => s.clearSelection);
 
-  const stats = selected ? selected.stats : liveStats;
   const viewingSaved = selected !== null;
+  const hasSelection = selection !== null && selectionStats !== null;
+
+  // While a shift-drag selection is active, it takes over the stats row
+  // entirely (red-accented) — the underlying whole-recording/live stats
+  // are still there underneath, just temporarily hidden.
+  const stats = hasSelection
+    ? selectionStats!
+    : selected
+      ? selected.stats
+      : liveStats;
 
   return (
     <div>
-      {viewingSaved && (
-        <div className="stats-banner">
-          <span>Viewing saved measurement</span>
-          <button className="link" onClick={() => selectRecent(null)}>
-            Back to live
+      {hasSelection ? (
+        <div className="stats-banner selection">
+          <span>
+            Selection: {fmtDuration(selection!.min)} →{" "}
+            {fmtDuration(selection!.max)}
+          </span>
+          <button className="link" onClick={() => clearSelection()}>
+            Clear
           </button>
         </div>
+      ) : (
+        viewingSaved && (
+          <div className="stats-banner">
+            <span>Viewing saved measurement</span>
+            <button className="link" onClick={() => selectRecent(null)}>
+              Back to live
+            </button>
+          </div>
+        )
       )}
-      <div className="stats">
+      <div className={hasSelection ? "stats selection" : "stats"}>
         <div className="stat">
           <div className="label">Average</div>
           <div className="value">{fmtCurrent(stats.avgUa)}</div>
