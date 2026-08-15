@@ -18,6 +18,7 @@ export function App(): JSX.Element {
   const connected = useUiStore((s) => s.connected);
   const sampling = useUiStore((s) => s.sampling);
   const setError = useUiStore((s) => s.setError);
+  const selectedRecentId = useUiStore((s) => s.selectedRecentId);
 
   useEffect(() => {
     if (!Ppk2Client.isSupported()) {
@@ -79,7 +80,7 @@ export function App(): JSX.Element {
           <div className="chart-wrap">
             <LiveChart />
           </div>
-          <ChartMinimap />
+          {selectedRecentId !== null && <ChartMinimap />}
           <StatsPanel />
         </section>
       </div>

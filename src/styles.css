@@ -302,6 +302,44 @@ select {
   border-radius: 8px;
   padding: 8px;
   min-height: 0;
+  /* The uPlot legend lives inside this box, below the canvas. Clip rather
+     than letting it spill over the minimap underneath. */
+  overflow: hidden;
+}
+
+/* ── uPlot legend (Time / Current readout under the main chart) ── */
+.chart-wrap .u-legend {
+  /* uPlot's default `margin: auto` + centered text pushes the legend into
+     unpredictable positions once the wrapper is a flex/grid child. Pin it
+     to the reserved strip beneath the canvas instead. */
+  margin: 4px 0 0;
+  text-align: left;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.chart-wrap .u-legend .u-series > * {
+  padding: 0 10px 0 0;
+}
+.chart-wrap .u-legend th {
+  font-weight: 500;
+}
+.chart-wrap .u-legend .u-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  /* Reserve a stable width so the row doesn't jitter as digits change. */
+  min-width: 84px;
+  text-align: right;
+}
+.chart-wrap .u-legend .u-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
 }
 
 .stats {

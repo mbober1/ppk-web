@@ -37,6 +37,12 @@ const MIN_WINDOW_SAMPLES = 256;
 // (one min/max pair per pixel). Capped at MAX_RENDER_PTS for safety.
 const DECIMATE_THRESHOLD = 2;
 const MAX_RENDER_PTS = 4_000;
+// uPlot renders its legend as a DOM table *below* the canvas, outside the
+// height we hand to `new uPlot({ height })`. If we size the canvas to the
+// full container height the legend overflows the chart box and ends up
+// hidden behind the minimap. Reserve a fixed strip for it instead.
+const LEGEND_RESERVE_PX = 30;
+const MIN_PLOT_HEIGHT_PX = 80;
 
 function windowSamplesFor(rateHz: number): number {
   const ideal = Math.round(rateHz * LIVE_WINDOW_SECONDS);
@@ -123,6 +129,14 @@ export function LiveChart(): JSX.Element {
     Math.max(
       1,
       plotRef.current?.width ?? containerRef.current?.clientWidth ?? 800,
+    );
+
+  // Canvas height = container height minus the strip reserved for the
+  // legend that uPlot appends underneath the plotting area.
+  const canvasHeight = (): number =>
+    Math.max(
+      MIN_PLOT_HEIGHT_PX,
+      (containerRef.current?.clientHeight ?? 320) - LEGEND_RESERVE_PX,
     );
 
   // Decimate `src` (at `rate` Hz) over the visible x-range [xMin, xMax] and
@@ -240,7 +254,7 @@ export function LiveChart(): JSX.Element {
 
     const opts: Options = {
       width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight,
+      height: canvasHeight(),
       pxAlign: false,
       scales: {
         y: { auto: true },
@@ -263,13 +277,22 @@ export function LiveChart(): JSX.Element {
             }),
         },
       ],
+      legend: { live: true },
       series: [
-        {},
+        {
+          label: "Time",
+          value: (_u, v) => (v == null ? "--" : `${v.toFixed(4)} s`),
+        },
         {
           label: "Current",
           stroke: "#4f8cff",
           width: 1,
           points: { show: false },
+          value: (_u, v) => {
+            if (v == null) return "--";
+            if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(3)} mA`;
+            return `${v.toFixed(2)} µA`;
+          },
         },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -304,7 +327,7 @@ export function LiveChart(): JSX.Element {
       const plot = plotRef.current;
       plot.setSize({
         width: containerRef.current.clientWidth,
-        height: containerRef.current.clientHeight,
+        height: canvasHeight(),
       });
       // Re-decimate to the new pixel width.
       const raw = snapshotRawRef.current;
@@ -377,7 +400,6 @@ export function LiveChart(): JSX.Element {
     let panStartX = 0;
     let panStartMin = 0;
     let panStartMax = 0;
-    let panStartWindow = 0; // live only
     let panPending = false;
 
     const onPanDown = (e: PointerEvent) => {
@@ -393,7 +415,6 @@ export function LiveChart(): JSX.Element {
       panStartX = e.clientX;
       panStartMin = plot.scales.x.min ?? 0;
       panStartMax = plot.scales.x.max ?? liveWindowRef.current;
-      panStartWindow = panStartMax - panStartMin;
       panPending = true;
 
       if (containerRef.current) containerRef.current.style.cursor = "grabbing";

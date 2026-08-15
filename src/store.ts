@@ -431,10 +431,33 @@ export const useUiStore = create<UiState>((set, get) => ({
     // Persist the just-finished run into recents (with raw samples if
     // small enough to fit our per-run budget).
     const snap = makeSnapshot(Date.now());
-    if (snap) commitSnapshot(snap);
+    if (snap) {
+      commitSnapshot(snap);
+      // Automatically switch to view mode on the run that just finished.
+      set({ selectedRecentId: snap.meta.id });
+    }
     runStartedAt = null;
   },
-  selectRecent: (id) => set({ selectedRecentId: id }),
+  selectRecent: (id) => {
+    const cur = get();
+    if (id === null && cur.selectedRecentId !== null && !cur.sampling) {
+      // Returning to live mode ("New measurement") from a saved-run view
+      // while nothing is currently recording: the ring buffer still holds
+      // the previous run's samples. Clear it so the chart starts blank
+      // instead of showing a stale trace until Start is pressed.
+      recorder.reset();
+      set((s) => ({
+        selectedRecentId: null,
+        stats: emptyStats(),
+        resetSignal: s.resetSignal + 1,
+        viewport: null,
+        dataExtent: null,
+        liveDetached: false,
+      }));
+      return;
+    }
+    set({ selectedRecentId: id });
+  },
   deleteRecent: (id) => {
     const entry = get().recents.find((r) => r.id === id);
     if (entry?.hasRaw) void deleteRaw(id);

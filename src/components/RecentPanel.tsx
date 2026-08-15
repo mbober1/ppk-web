@@ -38,8 +38,7 @@ export function RecentPanel(): JSX.Element {
           title="Show the live measurement"
         >
           <div className="recent-item-main">
-            <div className="recent-item-time">LIVE</div>
-            <div className="recent-item-meta">Current measurement</div>
+            <div className="recent-item-time">New measurement</div>
           </div>
         </li>
         {recents.map((r) => {
