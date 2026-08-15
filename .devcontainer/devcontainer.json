@@ -1,45 +1,48 @@
 {
-    "name": "ppk-web",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": ".."
-    },
-    "workspaceFolder": "/workspaces/ppk-web",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/ppk-web,type=bind,consistency=cached",
+  "name": "ppk-web",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "workspaceFolder": "/workspaces/ppk-web",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/ppk-web,type=bind,consistency=cached",
 
-    // The dev server binds to 5173. VS Code auto-opens the forwarded URL.
-    "forwardPorts": [5173],
-    "portsAttributes": {
-        "5173": {
-            "label": "Vite dev server",
-            "onAutoForward": "openPreview"
-        }
-    },
-
-    // Install project dependencies exactly once, after the container is built.
-    // `npm ci` is preferred but falls back to `npm install` when there is no
-    // lockfile yet (first run in a fresh checkout).
-    "postCreateCommand": "npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund",
-
-    // Use the non-root `node` user shipped by the base image.
-    "remoteUser": "node",
-
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "dbaeumer.vscode-eslint",
-                "esbenp.prettier-vscode",
-                "bradlc.vscode-tailwindcss",
-                "ms-vscode.vscode-typescript-next"
-            ],
-            "settings": {
-                "editor.formatOnSave": true,
-                "editor.defaultFormatter": "esbenp.prettier-vscode",
-                "typescript.tsdk": "node_modules/typescript/lib",
-                "typescript.enablePromptUseWorkspaceTsdk": true,
-                "files.eol": "\n",
-                "terminal.integrated.defaultProfile.linux": "zsh"
-            }
-        }
+  // The dev server binds to 5173. VS Code auto-opens the forwarded URL.
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite dev server",
+      "onAutoForward": "openPreview"
     }
+  },
+
+  "containerEnv": {
+    "NPM_CONFIG_UPDATE_NOTIFIER": "false",
+    "NPM_CONFIG_FUND": "false",
+    "NPM_CONFIG_AUDIT": "false"
+  },
+
+  // Install project dependencies exactly once, after the container is built.
+  // `npm ci` is preferred but falls back to `npm install` when there is no
+  // lockfile yet (first run in a fresh checkout).
+  "postCreateCommand": "npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund",
+
+  // Use the non-root `node` user shipped by the base image.
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true,
+        "files.eol": "\n",
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  }
 }

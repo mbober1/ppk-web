@@ -1,4 +1,4 @@
-# PPK Web
+# Power Profiler App
 
 Browser-based client for the Nordic Semiconductor
 [Power Profiler Kit II (PPK2)](https://www.nordicsemi.com/Software-and-tools/Development-Tools/Power-Profiler-Kit-2)

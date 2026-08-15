@@ -66,6 +66,36 @@ export class Ppk2Client {
     return typeof navigator !== "undefined" && "serial" in navigator;
   }
 
+  /**
+   * List serial ports the user has previously granted access to that match
+   * the PPK2 USB VID/PID. Returns an empty array if Web Serial is
+   * unavailable or the user has never authorized a device.
+   */
+  static async listPorts(): Promise<SerialPort[]> {
+    if (!Ppk2Client.isSupported()) return [];
+    const ports = await navigator.serial.getPorts();
+    return ports.filter((p) => {
+      const info = p.getInfo();
+      return (
+        info.usbVendorId === PPK2_USB_FILTER.usbVendorId &&
+        info.usbProductId === PPK2_USB_FILTER.usbProductId
+      );
+    });
+  }
+
+  /**
+   * Prompt the browser's device picker for a PPK2 port. Returns the chosen
+   * port without opening it — pass it to {@link connect} to actually use it.
+   */
+  static async requestPort(): Promise<SerialPort> {
+    if (!Ppk2Client.isSupported()) {
+      throw new Error(
+        "Web Serial is not supported in this browser. Use Chrome or Edge.",
+      );
+    }
+    return navigator.serial.requestPort({ filters: [PPK2_USB_FILTER] });
+  }
+
   getStatus(): StatusEvent {
     return this.status;
   }
@@ -87,10 +117,10 @@ export class Ppk2Client {
   }
 
   /**
-   * Prompts the user for a PPK2 port (filtered to Nordic VID/PID), opens
-   * it on the main thread, and fetches calibration metadata via the worker.
+   * Opens the given port (or prompts the user for one if omitted) and
+   * fetches calibration metadata via the worker.
    */
-  async connect(): Promise<void> {
+  async connect(preselected?: SerialPort): Promise<void> {
     if (!Ppk2Client.isSupported()) {
       throw new Error(
         "Web Serial is not supported in this browser. Use Chrome or Edge.",
@@ -100,9 +130,7 @@ export class Ppk2Client {
       throw new Error("Already connected");
     }
 
-    const port = await navigator.serial.requestPort({
-      filters: [PPK2_USB_FILTER],
-    });
+    const port = preselected ?? (await Ppk2Client.requestPort());
     // Baud rate is irrelevant for USB CDC-ACM but the API requires a value.
     await port.open({ baudRate: 9600 });
     if (!port.readable || !port.writable) {

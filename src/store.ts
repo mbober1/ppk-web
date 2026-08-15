@@ -35,7 +35,7 @@ interface UiState {
   setDut: (on: boolean) => Promise<void>;
   setSpikeFilter: (on: boolean) => Promise<void>;
   setSampleRateHz: (hz: number) => Promise<void>;
-  connect: () => Promise<void>;
+  connect: (port?: SerialPort) => Promise<void>;
   disconnect: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -84,9 +84,9 @@ export const useUiStore = create<UiState>((set, get) => ({
       stats: { ...recorder.getStats() },
     });
   },
-  connect: async () => {
+  connect: async (port) => {
     try {
-      await ppk2.connect();
+      await ppk2.connect(port);
       // Apply current UI settings to the freshly connected device.
       const s = get();
       await ppk2.setMode(s.mode);
