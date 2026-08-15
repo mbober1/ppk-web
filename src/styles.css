@@ -1,0 +1,230 @@
+@import 'uplot/dist/uPlot.min.css';
+
+:root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel-2: #22262f;
+    --border: #2d323d;
+    --text: #e6e8ee;
+    --muted: #8a92a2;
+    --accent: #4f8cff;
+    --accent-2: #82b1ff;
+    --danger: #ff6b6b;
+    --ok: #4ade80;
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font: inherit;
+}
+button:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+button.primary:hover:not(:disabled) {
+    background: var(--accent-2);
+    border-color: var(--accent-2);
+}
+button.danger {
+    background: transparent;
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+input[type='number'],
+input[type='range'],
+select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+}
+
+.app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.header .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+}
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+}
+.dot.on {
+    background: var(--ok);
+}
+.dot.sampling {
+    background: var(--accent);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 0;
+}
+
+.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-y: auto;
+}
+
+.panel {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+}
+.panel h2 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.field:last-child {
+    margin-bottom: 0;
+}
+.field label {
+    color: var(--muted);
+}
+.field input[type='number'] {
+    width: 90px;
+    text-align: right;
+}
+
+.row {
+    display: flex;
+    gap: 8px;
+}
+
+.content {
+    display: grid;
+    grid-template-rows: 1fr auto auto;
+    min-height: 0;
+    padding: 12px;
+    gap: 12px;
+}
+
+.chart-wrap {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 0;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+.stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+.stat .label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.stat .value {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+.banner {
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(255, 107, 107, 0.15);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.uplot,
+.u-wrap {
+    background: transparent !important;
+}
