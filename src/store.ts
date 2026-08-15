@@ -286,6 +286,30 @@ interface UiState {
   /** If non-null, StatsPanel shows this saved snapshot instead of live stats. */
   selectedRecentId: string | null;
 
+  /**
+   * The main chart's currently-visible X range (seconds). Null when there
+   * is no data yet. Updated by LiveChart on every x-scale change; read by
+   * ChartMinimap to position the viewport rectangle.
+   */
+  viewport: { min: number; max: number } | null;
+  /**
+   * Full extent of the current dataset (seconds). In live mode this is the
+   * filled ring-buffer span; in snapshot mode it is the recording duration.
+   * Null when no data is available. The minimap locks its x-scale to this
+   * range so it always shows the complete horizon.
+   */
+  dataExtent: { min: number; max: number } | null;
+  /**
+   * When true, the minimap dragged the viewport away from the live right
+   * edge. LiveChart reads this to stop auto-pinning the right edge and
+   * ChartMinimap shows a "Return to live" button.
+   */
+  liveDetached: boolean;
+
+  setViewport: (min: number, max: number) => void;
+  setDataExtent: (min: number, max: number) => void;
+  setLiveDetached: (v: boolean) => void;
+
   setError: (m: string | null) => void;
   setMode: (m: PowerMode) => Promise<void>;
   setVoltageMv: (mv: number) => Promise<void>;
@@ -322,6 +346,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   resetSignal: 0,
   recents: initialRecents,
   selectedRecentId: null,
+  viewport: null,
+  dataExtent: null,
+  liveDetached: false,
+
+  setViewport: (min, max) => set({ viewport: { min, max } }),
+  setDataExtent: (min, max) => set({ dataExtent: { min, max } }),
+  setLiveDetached: (v) => set({ liveDetached: v }),
 
   setError: (error) => set({ error }),
 
@@ -387,6 +418,9 @@ export const useUiStore = create<UiState>((set, get) => ({
       stats: emptyStats(),
       resetSignal: s.resetSignal + 1,
       selectedRecentId: null,
+      viewport: null,
+      dataExtent: null,
+      liveDetached: false,
     }));
     runStartedAt = Date.now();
     await ppk2.start();

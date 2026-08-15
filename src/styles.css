@@ -178,10 +178,122 @@ select {
 
 .content {
   display: grid;
-  grid-template-rows: 1fr auto auto;
+  /* main chart | minimap | stats */
+  grid-template-rows: 1fr auto auto auto;
   min-height: 0;
   padding: 12px;
   gap: 12px;
+}
+
+/* ── Minimap ── */
+.minimap-wrap {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  height: 80px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
+
+.minimap-inner {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+/* Make the uPlot canvas fill the minimap-inner container */
+.minimap-inner .uplot,
+.minimap-inner .u-wrap {
+  width: 100% !important;
+  height: 100% !important;
+}
+.minimap-inner canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Viewport rectangle overlay */
+.minimap-viewport {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(79, 140, 255, 0.12);
+  border: 1px solid rgba(79, 140, 255, 0.55);
+  border-radius: 2px;
+  cursor: grab;
+  pointer-events: all;
+  z-index: 10;
+  box-sizing: border-box;
+  min-width: 4px;
+}
+.minimap-viewport:active {
+  cursor: grabbing;
+}
+
+/* Left / right resize handles */
+.minimap-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 11;
+}
+.minimap-handle::after {
+  content: "";
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(79, 140, 255, 0.7);
+}
+.minimap-handle-left {
+  left: 0;
+  cursor: ew-resize;
+}
+.minimap-handle-right {
+  right: 0;
+  cursor: ew-resize;
+}
+
+/* Empty-state placeholder */
+.minimap-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  margin: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* "Return to live" button inside the minimap */
+.minimap-live-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  z-index: 20;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  cursor: pointer;
+  pointer-events: all;
+  white-space: nowrap;
 }
 
 .chart-wrap {

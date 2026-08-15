@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { ChartMinimap } from "./components/ChartMinimap";
 import { ChartPanel } from "./components/ChartPanel";
 import { ConnectButton } from "./components/ConnectButton";
 import { Controls } from "./components/Controls";
@@ -78,6 +79,7 @@ export function App(): JSX.Element {
           <div className="chart-wrap">
             <LiveChart />
           </div>
+          <ChartMinimap />
           <StatsPanel />
         </section>
       </div>
