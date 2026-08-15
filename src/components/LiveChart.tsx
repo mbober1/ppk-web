@@ -49,6 +49,35 @@ function windowSamplesFor(rateHz: number): number {
   return Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, ideal));
 }
 
+// Number of decimal places to show for a tick label, derived from the
+// increment between ticks (already converted to the display unit). When
+// zoomed in tightly the increment shrinks so more decimals are needed to
+// distinguish adjacent ticks; when zoomed out the increment grows so
+// trailing zero-decimals would be noise. Clamped to [0, 5].
+function decimalsForIncr(incr: number): number {
+  if (!Number.isFinite(incr) || incr <= 0) return 2;
+  const decimals = Math.ceil(-Math.log10(incr));
+  return Math.max(0, Math.min(5, decimals));
+}
+
+// Formats x-axis (time) tick labels, switching from seconds to
+// milliseconds/microseconds when the visible range is smaller than 1
+// second (mirrors the µA→mA unit switching already used on the y-axis).
+function formatTimeSplits(splits: number[], foundIncr: number): string[] {
+  const maxAbs = Math.max(foundIncr, ...splits.map((s) => Math.abs(s)));
+  let unit = "s";
+  let div = 1;
+  if (maxAbs < 1e-3) {
+    unit = "µs";
+    div = 1e-6;
+  } else if (maxAbs < 1) {
+    unit = "ms";
+    div = 1e-3;
+  }
+  const decimals = decimalsForIncr(foundIncr / div);
+  return splits.map((s) => `${(s / div).toFixed(decimals)} ${unit}`);
+}
+
 export function LiveChart(): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const plotRef = useRef<uPlot | null>(null);
@@ -264,7 +293,8 @@ export function LiveChart(): JSX.Element {
         {
           stroke: "#8a92a2",
           grid: { stroke: "#2d323d", width: 1 },
-          values: (_u, splits) => splits.map((s) => `${s.toFixed(2)} s`),
+          values: (_u, splits, _axisIdx, _foundSpace, foundIncr) =>
+            formatTimeSplits(splits, foundIncr),
         },
         {
           stroke: "#8a92a2",
@@ -347,18 +377,55 @@ export function LiveChart(): JSX.Element {
     });
     ro.observe(containerRef.current);
 
-    // --- Scroll-to-zoom ---
-    // Live mode   : scroll adjusts the visible window size; the rAF draw
-    //               loop always pins the right edge to the latest sample.
-    // Snapshot mode: scroll zooms in/out anchored to the cursor position.
+    // --- Scroll-to-zoom / scroll-to-pan ---
+    // Live mode   : vertical scroll adjusts the visible window size; the
+    //               rAF draw loop always pins the right edge to the latest
+    //               sample. Horizontal scroll is a no-op (nothing to pan
+    //               past — the window is always pinned to "now").
+    // Snapshot mode: vertical scroll zooms in/out anchored to the cursor
+    //               position; horizontal scroll pans the timeline left/
+    //               right, matching left-drag panning.
+    // The wheel event's dominant axis decides which behavior applies for
+    // a given event, so diagonal trackpad gestures don't zoom and pan at
+    // the same time.
     const ZOOM_FACTOR = 1.15;
     const onWheel = (e: WheelEvent) => {
       const plot = plotRef.current;
       if (!plot) return;
       e.preventDefault();
 
-      const factor = e.deltaY < 0 ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
       const minSpan = 10 / rateRef.current;
+
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        // Horizontal scroll — pan. No-op in live mode (nothing to pan to;
+        // the window is always pinned to the latest sample).
+        if (selectedRef.current === null) return;
+
+        const xScale = plot.scales.x;
+        const curMin = xScale.min ?? 0;
+        const curMax = xScale.max ?? snapshotDurationRef.current;
+        const span = curMax - curMin;
+        // Convert the wheel's pixel delta to a time delta using the same
+        // formula as the left-drag pan handler. Scroll-right (positive
+        // deltaX) advances the timeline forward, matching drag-to-pan.
+        const dtTime = (e.deltaX / pixelWidth()) * span;
+        let newMin = curMin + dtTime;
+        let newMax = curMax + dtTime;
+        // Clamp within [0, snapshotDuration], preserving span.
+        const duration = snapshotDurationRef.current;
+        if (newMin < 0) {
+          newMin = 0;
+          newMax = span;
+        }
+        if (newMax > duration) {
+          newMax = duration;
+          newMin = duration - span;
+        }
+        applySnapshotScale(newMin, newMax);
+        return;
+      }
+
+      const factor = e.deltaY < 0 ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
 
       if (selectedRef.current === null) {
         // Live mode — adjust window duration, clamped to [minSpan, LIVE_WINDOW_SECONDS].

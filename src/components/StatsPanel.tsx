@@ -9,9 +9,9 @@ function fmtCurrent(ua: number): string {
 
 function fmtCharge(uc: number): string {
   // µC → mAh: 1 mAh = 3600 mC = 3_600_000 µC
+  const mc = uc / 1000;
   const mah = uc / 3_600_000;
-  if (Math.abs(mah) >= 1) return `${mah.toFixed(4)} mAh`;
-  return `${(uc / 1000).toFixed(2)} mC`;
+  return `${mc.toFixed(2)} mC (${mah.toFixed(4)} mAh)`;
 }
 
 function fmtDuration(s: number): string {
